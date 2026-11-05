@@ -3,6 +3,7 @@ services:
     build:
       context: .
       network: host
+    image: iust-mail:latest
     container_name: iust-mail
     restart: unless-stopped
     env_file: .env

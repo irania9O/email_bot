@@ -38,29 +38,58 @@ def save_seen(seen: set[str]) -> None:
     tmp.replace(STATE_FILE)
 
 
-def format_message(m) -> str:
+def parse_mode() -> str:
+    """BOT_PARSE_MODE: HTML (default), Markdown, or none."""
+    mode = os.environ.get("BOT_PARSE_MODE", "HTML").strip().lower()
+    return {"html": "HTML", "markdown": "Markdown"}.get(mode, "")
+
+
+def md_escape(text: str) -> str:
+    for ch in "\\_*`[":
+        text = text.replace(ch, "\\" + ch)
+    return text
+
+
+def format_message(m, mode: str = "HTML") -> str:
     sender = m.sender.name or m.sender.email_address if m.sender else "unknown"
     addr = m.sender.email_address if m.sender else ""
     body = (m.text_body or "").strip()
     if len(body) > PREVIEW_CHARS:
         body = body[:PREVIEW_CHARS] + "…"
-    e = html.escape
-    return (
-        f"📧 <b>{e(m.subject or '(no subject)')}</b>\n"
-        f"<b>From:</b> {e(str(sender))} &lt;{e(addr)}&gt;\n"
-        f"<b>Date:</b> {m.datetime_received:%Y-%m-%d %H:%M} UTC\n\n"
-        f"{e(body)}"
-    )[:4096]
+    subject = m.subject or "(no subject)"
+    date = f"{m.datetime_received:%Y-%m-%d %H:%M} UTC"
+    if mode == "HTML":
+        e = html.escape
+        text = (
+            f"📧 <b>{e(subject)}</b>\n"
+            f"<b>From:</b> {e(str(sender))} &lt;{e(addr)}&gt;\n"
+            f"<b>Date:</b> {date}\n\n"
+            f"{e(body)}"
+        )
+    elif mode == "Markdown":
+        e = md_escape
+        text = (
+            f"📧 *{e(subject)}*\n"
+            f"*From:* {e(str(sender))} <{e(addr)}>\n"
+            f"*Date:* {date}\n\n"
+            f"{e(body)}"
+        )
+    else:
+        text = f"📧 {subject}\nFrom: {sender} <{addr}>\nDate: {date}\n\n{body}"
+    return text[:4096]
 
 
 def send_telegram(client: httpx.Client, text: str) -> None:
-    url = f"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/sendMessage"
-    r = client.post(url, json={
+    base = os.environ.get("BOT_API_BASE", "https://api.telegram.org").rstrip("/")
+    url = f"{base}/bot{os.environ['TELEGRAM_BOT_TOKEN']}/sendMessage"
+    payload = {
         "chat_id": os.environ["TELEGRAM_CHAT_ID"],
         "text": text,
-        "parse_mode": "HTML",
         "disable_web_page_preview": True,
-    })
+    }
+    if mode := parse_mode():
+        payload["parse_mode"] = mode
+    r = client.post(url, json=payload)
     r.raise_for_status()
 
 
@@ -76,7 +105,7 @@ def check_once(account: Account, client: httpx.Client, seen: set[str] | None) ->
     for m in reversed(items):
         if m.id not in seen:
             log.info("New email: %s", m.subject)
-            send_telegram(client, format_message(m))
+            send_telegram(client, format_message(m, parse_mode()))
             seen.add(m.id)
     return seen
 
@@ -84,6 +113,7 @@ def check_once(account: Account, client: httpx.Client, seen: set[str] | None) ->
 def main() -> None:
     load_dotenv()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
+    logging.getLogger("httpx").setLevel(logging.WARNING)  # its URLs contain the bot token
     interval = int(os.environ.get("POLL_SECONDS", "60"))
     proxy = os.environ.get("TELEGRAM_PROXY") or None
     seen = load_seen()
