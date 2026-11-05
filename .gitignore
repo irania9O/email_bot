@@ -12,3 +12,4 @@ wheels/
 # Secrets and state
 .env
 state.json
+data/

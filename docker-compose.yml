@@ -1,0 +1,12 @@
+services:
+  iust-mail:
+    build:
+      context: .
+      network: host
+    container_name: iust-mail
+    restart: unless-stopped
+    env_file: .env
+    # Host networking (Docker bridge DNS fails on this machine)
+    network_mode: host
+    volumes:
+      - ./data:/data

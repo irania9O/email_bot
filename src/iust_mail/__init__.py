@@ -83,10 +83,11 @@ def check_once(account: Account, client: httpx.Client, seen: set[str] | None) ->
 
 def main() -> None:
     load_dotenv()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", force=True)
     interval = int(os.environ.get("POLL_SECONDS", "60"))
     proxy = os.environ.get("TELEGRAM_PROXY") or None
     seen = load_seen()
+    log.info("Started; polling every %ds", interval)
     account = None
     with httpx.Client(proxy=proxy, timeout=30) as client:
         while True:
