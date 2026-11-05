@@ -11,12 +11,12 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
 
-# Then the project itself
+# Then the project code (run from src; no build step, so no network needed)
 COPY src ./src
-RUN uv sync --locked --no-dev
+ENV PYTHONPATH=/app/src
 
 RUN useradd --create-home --uid 1000 app && mkdir /data && chown app /data
 USER app
 VOLUME /data
 
-CMD ["/app/.venv/bin/iust-mail"]
+CMD ["/app/.venv/bin/python", "-c", "from iust_mail import main; main()"]
